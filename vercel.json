@@ -4,5 +4,20 @@
     "api/*.js": {
       "maxDuration": 10
     }
-  }
+  },
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/chart",
+      "destination": "/api/chart.js"
+    },
+    {
+      "source": "/api/chips",
+      "destination": "/api/chips.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
