@@ -1,0 +1,12 @@
+{
+  "name": "foxconn-analyst",
+  "version": "1.0.0",
+  "private": true,
+  "description": "鴻海與電子五哥股價、財報追蹤 dashboard",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
