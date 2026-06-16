@@ -4,7 +4,7 @@
   "private": true,
   "description": "鴻海與電子五哥股價、財報追蹤 dashboard",
   "scripts": {
-    "start": "node server.js"
+    "start": "node dev-server.js"
   },
   "engines": {
     "node": ">=18"
