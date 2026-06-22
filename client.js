@@ -1173,25 +1173,66 @@ function stockBadge(series) {
 
 function renderSnapshot() {
   const keySymbols = ["2317.TW", "2354.TW", "601138.SS", "6088.HK", "2382.TW", "2330.TW"];
-  $("#snapshotList").innerHTML = keySymbols
-    .map((symbol) => {
-      const item = company(symbol);
-      const series = state.marketData.get(symbol);
-      const day1 = periodReturn(series, 1);
-      const day10 = periodReturn(series, 10);
-      const day30 = periodReturn(series, 30);
-      const tone = (value) => (value > 0 ? "up" : value < 0 ? "down" : "neutral");
-      return `<tr>
+  const rows = keySymbols.map((symbol) => {
+    const item = company(symbol);
+    const series = state.marketData.get(symbol);
+    const day1 = periodReturn(series, 1);
+    const day10 = periodReturn(series, 10);
+    const day30 = periodReturn(series, 30);
+    const price = formatNumber(latestPoint(series).close);
+    const tone = (value) => (value > 0 ? "up" : value < 0 ? "down" : "neutral");
+    return {
+      item,
+      symbol,
+      price,
+      day1,
+      day10,
+      day30,
+      tone,
+    };
+  });
+
+  $("#snapshotList").innerHTML = rows
+    .map(
+      ({ item, symbol, price, day1, day10, day30, tone }) => `<tr>
         <td>
           <strong>${item.name}</strong>
           <div class="snapshot-symbol">${symbol}</div>
         </td>
-        <td>${formatNumber(latestPoint(series).close)}</td>
+        <td>${price}</td>
         <td><span class="return-value ${tone(day1)}">${formatPercent(day1)}</span></td>
         <td><span class="return-value ${tone(day10)}">${formatPercent(day10)}</span></td>
         <td><span class="return-value ${tone(day30)}">${formatPercent(day30)}</span></td>
-      </tr>`;
-    })
+      </tr>`,
+    )
+    .join("");
+
+  $("#snapshotMobileList").innerHTML = rows
+    .map(
+      ({ item, symbol, price, day1, day10, day30, tone }) => `<article class="snapshot-mobile-card">
+        <div class="snapshot-mobile-head">
+          <div>
+            <div class="snapshot-name">${item.name}</div>
+            <div class="snapshot-symbol">${symbol}</div>
+          </div>
+          <strong class="snapshot-mobile-price">${price}</strong>
+        </div>
+        <div class="snapshot-mobile-metrics">
+          <div>
+            <span>1D</span>
+            <strong class="${tone(day1)}">${formatPercent(day1)}</strong>
+          </div>
+          <div>
+            <span>10D</span>
+            <strong class="${tone(day10)}">${formatPercent(day10)}</strong>
+          </div>
+          <div>
+            <span>30D</span>
+            <strong class="${tone(day30)}">${formatPercent(day30)}</strong>
+          </div>
+        </div>
+      </article>`,
+    )
     .join("");
 }
 
