@@ -243,6 +243,13 @@ function formatPercent(value) {
   return `${sign}${value.toFixed(2)}%`;
 }
 
+function marketSourceLabel(source) {
+  if (source === "demo") {
+    return location.protocol === "file:" ? "示範股價（請改用 localhost / 部署站）" : "示範股價";
+  }
+  return "Yahoo Finance";
+}
+
 function formatSigned(value, digits = 0) {
   if (!Number.isFinite(value)) return "--";
   const sign = value > 0 ? "+" : "";
@@ -411,7 +418,7 @@ async function loadMarketData() {
   if (demoCount === 0) {
     $("#statusLine").textContent = "";
   } else {
-    $("#statusLine").textContent = "";
+    $("#statusLine").textContent = `已更新 ${liveCount} 檔即時股價；${demoCount} 檔使用 ${marketSourceLabel("demo")}。`;
   }
 }
 
@@ -1255,7 +1262,8 @@ function updateHero() {
   $("#foxconnPrice").textContent = formatNumber(point.close, 2);
   $("#foxconnChange").textContent = formatPercent(percent);
   $("#foxconnChange").className = `change ${percent > 0 ? "up" : percent < 0 ? "down" : "neutral"}`;
-  $("#foxconnUpdated").textContent = `更新 ${point.date.toLocaleDateString("zh-TW")}`;
+  const sourceText = marketSourceLabel(foxconn?.source);
+  $("#foxconnUpdated").textContent = `${sourceText} · ${point.date.toLocaleDateString("zh-TW")}`;
   renderHeroCharts();
 }
 
