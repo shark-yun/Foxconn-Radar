@@ -219,6 +219,24 @@ function formatNumber(value, digits = 2) {
   }).format(value);
 }
 
+function compactNumber(value) {
+  if (typeof value !== "string") return Number(value || 0);
+  return Number(value.replace(/,/g, "").trim() || 0);
+}
+
+function toYmd(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+function shiftDate(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
 function formatPercent(value) {
   if (!Number.isFinite(value)) return "--";
   const sign = value > 0 ? "+" : "";
@@ -427,29 +445,126 @@ function demoChipRows(symbol, days = 20) {
   return rows;
 }
 
+async function fetchJsonClient(url) {
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json",
+    },
+  });
+  if (!response.ok) throw new Error(`TWSE ${response.status}`);
+  return response.json();
+}
+
+async function fetchInstitutionalClient(date, symbol) {
+  const twseUrl = new URL("https://www.twse.com.tw/rwd/zh/fund/T86");
+  twseUrl.searchParams.set("date", date);
+  twseUrl.searchParams.set("selectType", "ALLBUT0999");
+  twseUrl.searchParams.set("response", "json");
+  const payload = await fetchJsonClient(twseUrl);
+  if (payload.stat !== "OK") return null;
+  const row = payload.data?.find((item) => item[0] === symbol);
+  if (!row) return null;
+  return {
+    date: payload.date || date,
+    foreignNet: compactNumber(row[4]) / 1000,
+    investmentTrustNet: compactNumber(row[10]) / 1000,
+    dealerNet: compactNumber(row[11]) / 1000,
+    totalNet: compactNumber(row[18]) / 1000,
+  };
+}
+
+async function fetchMarginClient(date, symbol) {
+  const twseUrl = new URL("https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN");
+  twseUrl.searchParams.set("date", date);
+  twseUrl.searchParams.set("selectType", "ALL");
+  twseUrl.searchParams.set("response", "json");
+  const payload = await fetchJsonClient(twseUrl);
+  if (payload.stat !== "OK") return null;
+  const summary = payload.tables?.find((table) => table.title?.includes("融資融券彙總"));
+  const row = summary?.data?.find((item) => item[0] === symbol);
+  if (!row) return null;
+  return {
+    marginBuy: compactNumber(row[2]),
+    marginSell: compactNumber(row[3]),
+    marginBalance: compactNumber(row[6]),
+    shortBuy: compactNumber(row[8]),
+    shortSell: compactNumber(row[9]),
+    shortBalance: compactNumber(row[12]),
+  };
+}
+
+async function fetchChipRowsDirect(symbol, days = 20) {
+  const rows = [];
+  let cursor = new Date();
+  let attempts = 0;
+  while (rows.length < days && attempts < days * 3) {
+    attempts += 1;
+    if (cursor.getDay() !== 0 && cursor.getDay() !== 6) {
+      const date = toYmd(cursor);
+      try {
+        const [inst, margin] = await Promise.all([
+          fetchInstitutionalClient(date, symbol),
+          fetchMarginClient(date, symbol),
+        ]);
+        if (inst) {
+          rows.push({
+            ...inst,
+            ...(margin || {}),
+            source: margin ? "twse-direct" : "twse-direct-partial",
+          });
+        }
+      } catch (error) {
+        // Skip holidays, unsettled days, CORS blocks, and transient TWSE responses.
+      }
+    }
+    cursor = shiftDate(cursor, -1);
+  }
+  return rows.reverse();
+}
+
 async function loadChipData(symbol = state.chipSymbol, options = {}) {
   state.chipSymbol = symbol;
   if (!options.silent) {
     $("#statusLine").textContent = `載入 ${symbol} 每日籌碼資料中...`;
   }
   try {
-    const response = await fetch(`/api/chips?symbol=${encodeURIComponent(symbol)}&days=20`);
-    if (!response.ok) throw new Error(`Chip API ${response.status}`);
-    const payload = await response.json();
-    const rows = Array.isArray(payload.data) && payload.data.length ? payload.data : demoChipRows(symbol);
+    let rows = [];
+    let source = "twse";
+    if (location.protocol.startsWith("http")) {
+      const response = await fetch(`/api/chips?symbol=${encodeURIComponent(symbol)}&days=20`);
+      if (!response.ok) throw new Error(`Chip API ${response.status}`);
+      const payload = await response.json();
+      rows = Array.isArray(payload.data) && payload.data.length ? payload.data : [];
+      source = payload.source || "twse";
+    } else {
+      rows = await fetchChipRowsDirect(symbol, 20);
+      source = rows.length ? "twse-direct" : "demo";
+    }
+    if (!rows.length) {
+      rows = demoChipRows(symbol);
+      source = "demo";
+    }
     state.chipData.set(symbol, {
-      source: payload.source || "twse",
+      source,
       rows,
     });
   } catch (error) {
-    state.chipData.set(symbol, {
-      source: "demo",
-      rows: demoChipRows(symbol),
-    });
+    try {
+      const rows = await fetchChipRowsDirect(symbol, 20);
+      state.chipData.set(symbol, {
+        source: rows.length ? "twse-direct" : "demo",
+        rows: rows.length ? rows : demoChipRows(symbol),
+      });
+    } catch (fallbackError) {
+      state.chipData.set(symbol, {
+        source: "demo",
+        rows: demoChipRows(symbol),
+      });
+    }
   }
   const data = state.chipData.get(symbol);
   const item = companyByStockNo(symbol);
-  const sourceText = data.source === "demo" ? "示範資料" : "TWSE";
+  const sourceText = chipSourceLabel(data.source);
   if (!options.silent || document.querySelector(".view.active")?.id === "chipsView") {
     $("#statusLine").textContent = `已更新 ${item?.name || symbol} 每日籌碼，來源 ${sourceText}。`;
   }
@@ -593,6 +708,13 @@ function nextQuarterLabel(label) {
   const quarter = parsed.quarter === 4 ? 1 : parsed.quarter + 1;
   const year = parsed.quarter === 4 ? parsed.year + 1 : parsed.year;
   return `${year}Q${quarter}`;
+}
+
+function chipSourceLabel(source) {
+  if (source === "demo") {
+    return location.protocol === "file:" ? "示範資料（請改用 localhost / 部署站）" : "示範資料";
+  }
+  return "TWSE";
 }
 
 function earningsWindow(data) {
@@ -1409,7 +1531,7 @@ function renderChips() {
   const rows = data?.rows || [];
   if (!rows.length) return;
   const latest = rows[rows.length - 1];
-  const sourceText = data.source === "demo" ? "示範資料" : "TWSE";
+  const sourceText = chipSourceLabel(data.source);
   $("#chipDateLabel").textContent = latest.date.replace(/(\d{4})(\d{2})(\d{2})/, "$1/$2/$3");
   $("#chipSourceLabel").textContent = `${sourceText} · 單位：張`;
   drawChipChart($("#chipChart"), rows);
