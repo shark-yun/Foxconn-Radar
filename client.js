@@ -1607,7 +1607,7 @@ function bindEvents() {
   }
 
   $$(".nav-tab").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       $$(".nav-tab").forEach((tab) => tab.classList.remove("active"));
       button.classList.add("active");
       $$(".view").forEach((view) => view.classList.remove("active"));
@@ -1615,6 +1615,9 @@ function bindEvents() {
       document.querySelector(".rail").classList.remove("open");
       if (railToggle) railToggle.setAttribute("aria-expanded", "false");
       renderFinancials();
+      if (button.dataset.view === "chips") {
+        await loadChipData(state.chipSymbol, { silent: true });
+      }
       renderChips();
     });
   });
@@ -1694,10 +1697,7 @@ async function init() {
   renderChipCompanyOptions();
   bindEvents();
   await loadMarketData();
-  renderAll();
-  loadChipData(state.chipSymbol, { silent: true })
-    .then(renderChips)
-    .catch((error) => console.warn("Chip data load failed", error));
+  await loadChipData(state.chipSymbol, { silent: true });
   renderAll();
 }
 
