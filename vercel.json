@@ -22,11 +22,6 @@
       "use": "@vercel/static"
     }
   ],
-  "functions": {
-    "api/*.js": {
-      "maxDuration": 10
-    }
-  },
   "cleanUrls": true,
   "routes": [
     {
